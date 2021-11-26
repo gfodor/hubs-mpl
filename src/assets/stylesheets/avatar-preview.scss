@@ -1,0 +1,209 @@
+@use "../../react-components/styles/theme.scss";
+
+:local(.preview) {
+  position: relative;
+  border-radius: 20px;
+  background: theme.$tile-bg-color;
+
+  .loader {
+    position: absolute;
+    left: calc(50% - 4.3em);
+    top: calc(50% - 4.5em);
+  }
+  .error {
+    color: theme.$text2-color;
+    text-align: center;
+    padding: 1.5em;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-weight: bold;
+    white-space: pre-wrap;
+    box-sizing: border-box;
+    width: 100%;
+  }
+  .error-icon {
+    width: 16px;
+    height: 16px;
+    transform: translateY(2px);
+    margin: 0 0.3em;
+  }
+}
+:local(.avatar-swatch) {
+  position: absolute;
+  left: -20px;
+  margin-top: 24px;
+  margin-left: 74px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 192px;
+  height: 192px;
+  flex: 0 0 192px;
+  color: transparent;
+  appearance: none;
+  -moz-appearance: none;
+  -webkit-appearance: none;
+  outline-style: none;
+  border: 0;
+  background: transparent;
+
+  &:hover {
+    filter: brightness(80%);
+    transition: none;
+  }
+
+  &:active {
+    transform: translate(0px, 1px) scale(1, 1);
+    transition: none;
+  }
+
+  filter: brightness(100%);
+  transform: scale(1, 1);
+  transition-property: filter, transform;
+  transition-duration: 75ms, 75ms;
+
+  &:not([data-mouth="0"]):not([data-mouth="12"]) {
+    filter: brightness(110%);
+    transform: scale(1.05, 1.05);
+    transition-delay: 0ms;
+
+    &:hover {
+      filter: brightness(80%);
+      transition: none;
+    }
+
+    &:active {
+      transform: translate(0px, 1px) scale(1.05, 1.05);
+      transition: none;
+    }
+  }
+
+  &[data-eyes="0"] .eyes-0 {
+    visibility: visible;
+  }
+  &[data-eyes="1"] .eyes-1 {
+    visibility: visible;
+  }
+  &[data-eyes="2"] .eyes-2 {
+    visibility: visible;
+  }
+  &[data-eyes="3"] .eyes-3 {
+    visibility: visible;
+  }
+  &[data-eyes="4"] .eyes-4 {
+    visibility: visible;
+  }
+  &[data-eyes="5"] .eyes-5 {
+    visibility: visible;
+  }
+  &[data-eyes="6"] .eyes-6 {
+    visibility: visible;
+  }
+  &[data-eyes="7"] .eyes-7 {
+    visibility: visible;
+  }
+
+  &[data-mouth="0"] .mouth-0 {
+    visibility: visible;
+  }
+  &[data-mouth="1"] .mouth-1 {
+    visibility: visible;
+  }
+  &[data-mouth="2"] .mouth-2 {
+    visibility: visible;
+  }
+  &[data-mouth="3"] .mouth-3 {
+    visibility: visible;
+  }
+  &[data-mouth="4"] .mouth-4 {
+    visibility: visible;
+  }
+  &[data-mouth="5"] .mouth-5 {
+    visibility: visible;
+  }
+  &[data-mouth="6"] .mouth-6 {
+    visibility: visible;
+  }
+  &[data-mouth="7"] .mouth-7 {
+    visibility: visible;
+  }
+  &[data-mouth="8"] .mouth-8 {
+    visibility: visible;
+  }
+  &[data-mouth="9"] .mouth-9 {
+    visibility: visible;
+  }
+  &[data-mouth="10"] .mouth-10 {
+    visibility: visible;
+  }
+  &[data-mouth="11"] .mouth-11 {
+    visibility: visible;
+  }
+  &[data-mouth="12"] .mouth-12 {
+    visibility: visible;
+  }
+}
+:local(.avatar-body) {
+  width: 192px;
+  height: 192px;
+}
+
+:local(.avatar-eyes) {
+  position: absolute;
+  top: 10px;
+  left: 2px;
+  width: 184px;
+  height: 128px;
+  visibility: hidden;
+}
+
+:local(.avatar-mouth) {
+  position: absolute;
+  top: 54px;
+  width: 168px;
+  height: 168px;
+  transform: scale(1, 0.6);
+  visibility: hidden;
+}
+
+:local(.picker) {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+}
+
+:local(.hue-slider) {
+  width: 100%;
+  height: 20px;
+  position: relative;
+
+  .hue-horizontal {
+    border-radius: 0 0 6px 6px;
+  }
+}
+
+:local(.sat-slider) {
+  width: 100%;
+  flex: 1;
+  position: relative;
+
+  div {
+    border-radius: 6px 6px 0 0;
+  }
+
+  .saturation-white,
+  .saturation-black {
+    border-radius: 6px 6px 0 0;
+  }
+}
+
+:local(.picker-wrap) {
+  display: flex;
+  width: 100%;
+  height: 92px;
+  position: absolute;
+  bottom: 0;
+}
