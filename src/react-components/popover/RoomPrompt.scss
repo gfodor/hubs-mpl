@@ -1,0 +1,32 @@
+@use "../styles/theme.scss";
+
+:local(.room-prompt) {
+  position: absolute;
+  border-radius: 8px;
+  background-color: theme.$background1-color;
+  border: 1px solid theme.$border1-color;
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  top: 72px;
+  left: 24px;
+  width: 400px;
+  height: 150px;
+  padding: 16px;
+}
+
+:local(.label) {
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+:local(.question) {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+:local(.tip) {
+  font-size: 10px;
+  font-weight: bold;
+  margin-top: 26px;
+}

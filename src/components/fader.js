@@ -2,7 +2,7 @@
  * Creates a box around the element (assumed to be the camera's PoV) which can be used for fade-to-black.
  */
 
-const FADE_DURATION_MS = 750;
+const FADE_DURATION_MS = 150;
 
 AFRAME.registerComponent("fader", {
   schema: {

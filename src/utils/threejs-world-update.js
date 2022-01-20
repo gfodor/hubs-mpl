@@ -162,9 +162,9 @@ THREE.Object3D.prototype.updateMatrix = function() {
   handleMatrixModification(this);
 };
 
-const applyMatrix = THREE.Object3D.prototype.applyMatrix;
-THREE.Object3D.prototype.applyMatrix = function() {
-  applyMatrix.apply(this, arguments);
+const applyMatrix4 = THREE.Object3D.prototype.applyMatrix4;
+THREE.Object3D.prototype.applyMatrix4 = function() {
+  applyMatrix4.apply(this, arguments);
   this.matrixWorldNeedsUpdate = true;
   handleMatrixModification(this);
 };
@@ -240,7 +240,7 @@ if (!debugMatrices) {
           this.matrixWorld = this.parent.matrixWorld;
         } else {
           // Once matrixIsModified === true, this.matrixWorld has been updated to be a local
-          // copy, not a reference to this.parent.matrixWorld (see updateMatrix/applyMatrix)
+          // copy, not a reference to this.parent.matrixWorld (see updateMatrix/applyMatrix4)
           this.matrixWorld.multiplyMatrices(this.parent.matrixWorld, this.matrix);
         }
       }
@@ -307,7 +307,7 @@ if (!debugMatrices) {
           this.matrixWorld = this.parent.matrixWorld;
         } else {
           // Once matrixIsModified === true, this.matrixWorld has been updated to be a local
-          // copy, not a reference to this.parent.matrixWorld (see updateMatrix/applyMatrix)
+          // copy, not a reference to this.parent.matrixWorld (see updateMatrix/applyMatrix4)
           this.matrixWorld.multiplyMatrices(this.parent.matrixWorld, this.matrix);
         }
       }
@@ -377,7 +377,7 @@ THREE.Object3D.prototype.lookAt = (function() {
     if (parent) {
       m1.extractRotation(parent.matrixWorld);
       q1.setFromRotationMatrix(m1);
-      q2.premultiply(q1.inverse());
+      q2.premultiply(q1.invert());
     }
 
     if (!almostEqualQuaternion(this.quaternion, q2)) {
@@ -432,14 +432,14 @@ THREE.Camera.prototype.updateMatrices = function(forceLocalUpdate, forceWorldUpd
         this.matrixWorld = this.parent.matrixWorld;
       } else {
         // Once matrixIsModified === true, this.matrixWorld has been updated to be a local
-        // copy, not a reference to this.parent.matrixWorld (see updateMatrix/applyMatrix)
+        // copy, not a reference to this.parent.matrixWorld (see updateMatrix/applyMatrix4)
         this.matrixWorld.multiplyMatrices(this.parent.matrixWorld, this.matrix);
       }
     }
 
     this.childrenNeedMatrixWorldUpdate = true;
     this.matrixWorldNeedsUpdate = false;
-    this.matrixWorldInverse.getInverse(this.matrixWorld);
+    this.matrixWorldInverse.copy(this.matrixWorld).invert();
     this.worldMatrixConsumerFlags = 0x00;
   }
 };

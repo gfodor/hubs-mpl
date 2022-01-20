@@ -94,3 +94,19 @@ export function ApplyButton(props) {
     </Button>
   );
 }
+
+export function SubmitButton(props) {
+  return (
+    <Button preset="submit" {...props}>
+      <FormattedMessage id="button.submit" defaultMessage="Submit" />
+    </Button>
+  );
+}
+
+export function CloseButton(props) {
+  return (
+    <Button preset="submit" {...props}>
+      <FormattedMessage id="button.close" defaultMessage="Close" />
+    </Button>
+  );
+}

@@ -18,6 +18,24 @@
   }
 }
 
+:local(.room-menu) {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  flex-direction: row;
+  background-color: theme.$button-bg-color;
+  border: 1px solid theme.$button-border-color;
+  border-radius: 12px;
+  pointer-events: auto;
+  padding: 4px;
+
+  @media(min-width: theme.$breakpoint-lg) {
+    top: 24px;
+    left: 24px;
+  }
+}
+
 :local(.content-menu-button) {
   display: flex;
   flex-direction: row;
@@ -60,6 +78,10 @@
   color: theme.$text5-color;
   background-color: theme.$active-color;
 
+  .room-button-count { 
+    color: #efefef;
+  }
+
   svg {
     *[stroke=\#000] {
       stroke: theme.$text5-color;
@@ -83,4 +105,10 @@
   width: 1px;
   margin: 0 8px;
   background-color: theme.$border1-color;
+}
+
+.room-button-count { 
+  color: #888;
+  display: inline-block;
+  width: 14px;
 }

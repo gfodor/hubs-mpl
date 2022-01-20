@@ -168,7 +168,7 @@ const ensureLightsAreSeenByCamera = function(o) {
 };
 const enableInspectLayer = function(o) {
   const batchManagerSystem = AFRAME.scenes[0].systems["hubs-systems"].batchManagerSystem;
-  const batch = batchManagerSystem.batchingEnabled && batchManagerSystem.batchManager.batchForMesh.get(o);
+  const batch = batchManagerSystem.batchManager.batchForMesh.get(o);
   if (batch) {
     batch.layers.enable(CAMERA_LAYER_INSPECT);
     o.layers.enable(CAMERA_LAYER_BATCH_INSPECT);
@@ -178,7 +178,7 @@ const enableInspectLayer = function(o) {
 };
 const disableInspectLayer = function(o) {
   const batchManagerSystem = AFRAME.scenes[0].systems["hubs-systems"].batchManagerSystem;
-  const batch = batchManagerSystem.batchingEnabled && batchManagerSystem.batchManager.batchForMesh.get(o);
+  const batch = batchManagerSystem.batchManager.batchForMesh.get(o);
   if (batch) {
     batch.layers.disable(CAMERA_LAYER_INSPECT);
     o.layers.disable(CAMERA_LAYER_BATCH_INSPECT);

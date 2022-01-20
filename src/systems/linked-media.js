@@ -15,11 +15,18 @@ AFRAME.registerSystem("linked-media", {
   },
 
   addLinkageHandler(elA, elB) {
-    const handler = () => {
+    const handler = async () => {
       // Since elB will have its event fired here if we change something, ignore it.
       if (elB._handlingLinkage) return;
+
       elA._handlingLinkage = true;
+
+      // A-frame emit rate limiting, make sure we have latest state.
+      await new Promise(res => setTimeout(res, 200));
       this.syncLinkage(elA, elB);
+
+      // Block self-generated networked updates from reverse syncing.
+      await new Promise(res => setTimeout(res, 500));
       elA._handlingLinkage = false;
     };
 

@@ -29,9 +29,17 @@ AFRAME.registerComponent("player-info", {
     this.update = this.update.bind(this);
     this.localStateAdded = this.localStateAdded.bind(this);
     this.localStateRemoved = this.localStateRemoved.bind(this);
+    this.nametagEl = null;
+    this.identityNameEl = null;
+    this.recordingBadgeEl = null;
+    this.modBadgeEl = null;
+    this.twitterAvatarEl = null;
 
     this.isLocalPlayerInfo = this.el.id === "avatar-rig";
     this.playerSessionId = null;
+
+    this.twitterAvatarUrl = null;
+    this.twitterHandle = null;
 
     if (!this.isLocalPlayerInfo) {
       NAF.utils.getNetworkedEntity(this.el).then(networkedEntity => {
@@ -97,36 +105,48 @@ AFRAME.registerComponent("player-info", {
   },
   updateFromPresenceMeta(presenceMeta) {
     this.permissions = presenceMeta.permissions;
-    this.displayName = presenceMeta.profile.displayName;
+    this.displayName = presenceMeta.twitter_handle || presenceMeta.profile.displayName;
     this.identityName = presenceMeta.profile.identityName;
     this.isRecording = !!(presenceMeta.streaming || presenceMeta.recording);
     this.isOwner = !!(presenceMeta.roles && presenceMeta.roles.owner);
+    this.twitterAvatarUrl = presenceMeta.twitter_avatar_url;
     this.applyDisplayName();
   },
   can(perm) {
     return !!this.permissions && this.permissions[perm];
   },
   applyDisplayName() {
+    if (!this.nametagEl) {
+      this.nametagEl = this.el.querySelector(".nametag");
+      this.identityNameEl = this.el.querySelector(".identityName");
+      this.recordingBadgeEl = this.el.querySelector(".recordingBadge");
+      this.modBadgeEl = this.el.querySelector(".modBadge");
+      this.twitterAvatarEl = this.el.querySelector(".twitter-avatar");
+    }
+
     const store = window.APP.store;
     // OSTN hide nametags of non-promoted users after enough occupants
 
-    const occupantCount =
-      window.APP.hubChannel && window.APP.hubChannel.presence && window.APP.hubChannel.presence.state
-        ? Object.keys(window.APP.hubChannel.presence.state).length
-        : 0;
-    const hideCrowdNonOwnerNametag = occupantCount >= HIDE_NAMETAG_OCCUPANT_COUNT && !this.isOwner;
-    const isHoveredAvatar =
-      this.el.sceneEl.systems["hubs-systems"].avatarSystem.hoveredAvatarSessionId === this.playerSessionId;
+    const presenceCount = (window.APP.hubChannel && window.APP.hubChannel.presenceCount) || 0;
+    const SYSTEMS = this.el.sceneEl.systems["hubs-systems"];
+    const hideNametagsInCrowd = !SYSTEMS.avatarAudioTrackSystem.hasAudioFalloff();
+    const hideCrowdNonOwnerNametag =
+      hideNametagsInCrowd && presenceCount >= HIDE_NAMETAG_OCCUPANT_COUNT && !this.isOwner;
+
+    const isHoveredAvatar = SYSTEMS.avatarSystem.hoveredAvatarSessionId === this.playerSessionId;
+
+    const isFrozen = this.el.sceneEl.is("frozen");
 
     const infoShouldBeHidden =
       this.isLocalPlayerInfo ||
-      ((hideCrowdNonOwnerNametag || store.state.preferences.onlyShowNametagsInFreeze) &&
-        !this.el.sceneEl.is("frozen") &&
-        !isHoveredAvatar);
+      ((hideCrowdNonOwnerNametag || store.state.preferences.onlyShowNametagsInFreeze) && !isFrozen && !isHoveredAvatar);
 
-    const nametagEl = this.el.querySelector(".nametag");
+    const { nametagEl, identityNameEl, recordingBadgeEl, modBadgeEl, twitterAvatarEl } = this;
+
     if (this.displayName && nametagEl) {
-      nametagEl.setAttribute("text", { value: this.displayName });
+      if (nametagEl.getAttribute("text").value !== this.displayName) {
+        nametagEl.setAttribute("text", { value: this.displayName });
+      }
 
       if (nametagEl.object3D.visible !== !infoShouldBeHidden) {
         nametagEl.object3D.visible = !infoShouldBeHidden;
@@ -136,21 +156,35 @@ AFRAME.registerComponent("player-info", {
         }
       }
     }
-    const identityNameEl = this.el.querySelector(".identityName");
     if (identityNameEl) {
       if (this.identityName) {
-        identityNameEl.setAttribute("text", { value: this.identityName });
-        identityNameEl.object3D.visible = this.el.sceneEl.is("frozen");
+        if (identityNameEl.getAttribute("text").value !== this.identityName) {
+          identityNameEl.setAttribute("text", { value: this.identityName });
+        }
+
+        identityNameEl.object3D.visible = isFrozen;
       }
     }
-    const recordingBadgeEl = this.el.querySelector(".recordingBadge");
     if (recordingBadgeEl) {
       recordingBadgeEl.object3D.visible = this.isRecording && !infoShouldBeHidden;
     }
 
-    const modBadgeEl = this.el.querySelector(".modBadge");
     if (modBadgeEl) {
       modBadgeEl.object3D.visible = !this.isRecording && this.isOwner && !infoShouldBeHidden;
+    }
+
+    if (twitterAvatarEl) {
+      if (this.twitterAvatarUrl && this.twitterAvatarUrl !== twitterAvatarEl.getAttribute("src")) {
+        twitterAvatarEl.setAttribute("media-image", {
+          batch: true,
+          src: this.twitterAvatarUrl,
+          contentType: "image/jpg",
+          alphaMode: "opaque"
+        });
+      } else if (!this.twitterAvatarUrl) {
+        twitterAvatarEl.setAttribute("src", "hubs/src/assets/images/warning_icon.png");
+        twitterAvatarEl.object3D.visible = false;
+      }
     }
   },
   applyProperties(e) {

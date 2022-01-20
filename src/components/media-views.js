@@ -12,7 +12,7 @@ import { proxiedUrlFor } from "../utils/media-url-utils";
 import { buildAbsoluteURL } from "url-toolkit";
 import { SOUND_CAMERA_TOOL_TOOK_SNAPSHOT } from "../systems/sound-effects-system";
 import { promisifyWorker } from "../utils/promisify-worker.js";
-import pdfjs from "pdfjs-dist";
+import * as pdfjs from "pdfjs-dist/build/pdf.min.js";
 import { refreshMediaMirror, getCurrentMirroredMedia } from "../utils/mirror-utils";
 import { detect } from "detect-browser";
 import semver from "semver";
@@ -1153,18 +1153,18 @@ AFRAME.registerComponent("media-image", {
         geometry = new THREE.SphereBufferGeometry(1, 64, 32);
         // invert the geometry on the x-axis so that all of the faces point inward
         geometry.scale(-1, 1, 1);
-
-        // Flip uvs on the geometry
-        if (!texture.flipY) {
-          const uvs = geometry.attributes.uv.array;
-
-          for (let i = 1; i < uvs.length; i += 2) {
-            uvs[i] = 1 - uvs[i];
-          }
-        }
       } else {
         geometry = new THREE.PlaneBufferGeometry(1, 1, 1, 1, texture.flipY);
         material.side = THREE.DoubleSide;
+      }
+
+      // Flip uvs on the geometry
+      if (!texture.flipY) {
+        const uvs = geometry.attributes.uv.array;
+
+        for (let i = 1; i < uvs.length; i += 2) {
+          uvs[i] = 1 - uvs[i];
+        }
       }
 
       this.mesh = new THREE.Mesh(geometry, material);
@@ -1203,7 +1203,13 @@ AFRAME.registerComponent("media-image", {
       scaleToAspectRatio(this.el, ratio);
     }
 
-    if (texture !== errorTexture && this.data.batch && !texture.isCompressedTexture) {
+    if (
+      texture !== errorTexture &&
+      this.data.batch &&
+      !this.mesh.material.transparent &&
+      this.mesh.material.alphaTest === 0 &&
+      !texture.isCompressedTexture
+    ) {
       batchManagerSystem.addObject(this.mesh);
     }
 
@@ -1231,6 +1237,7 @@ AFRAME.registerComponent("media-pdf", {
 
     this.texture.encoding = THREE.sRGBEncoding;
     this.texture.minFilter = THREE.LinearFilter;
+    this.pdfReady = null;
 
     this.el.addEventListener("pager-snap-clicked", () => this.snap());
   },
@@ -1271,12 +1278,20 @@ AFRAME.registerComponent("media-pdf", {
 
       if (src !== oldData.src) {
         const loadingSrc = this.data.src;
-        const pdf = await pdfjs.getDocument(src);
+        this.pdfReady = pdfjs.getDocument(src).promise;
+        this.pdf = await this.pdfReady;
+        this.pdfReady = null;
+
         if (loadingSrc !== this.data.src) return;
 
-        this.pdf = pdf;
         this.el.setAttribute("media-pager", { maxIndex: this.pdf.numPages - 1 });
       }
+
+      if (this.pdfReady !== null) {
+        await this.pdfReady;
+      }
+
+      if (!this.pdf) return;
 
       const page = await this.pdf.getPage(index + 1);
       if (src !== this.data.src || index !== this.data.index) return;
@@ -1295,6 +1310,7 @@ AFRAME.registerComponent("media-pdf", {
       await this.renderTask.promise;
 
       this.renderTask = null;
+      page.cleanup();
 
       if (src !== this.data.src || index !== this.data.index) return;
     } catch (e) {
@@ -1317,10 +1333,6 @@ AFRAME.registerComponent("media-pdf", {
     this.mesh.material.needsUpdate = true;
 
     scaleToAspectRatio(this.el, ratio);
-
-    if (texture !== errorTexture && this.data.batch) {
-      this.el.sceneEl.systems["hubs-systems"].batchManagerSystem.addObject(this.mesh);
-    }
 
     if (this.el.components["media-pager"] && this.el.components["media-pager"].data.index !== this.data.index) {
       this.el.setAttribute("media-pager", { index: this.data.index });

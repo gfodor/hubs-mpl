@@ -36,6 +36,10 @@ import viseme10 from "../assets/jel/images/avatar/viseme-9.svg";
 import viseme11 from "../assets/jel/images/avatar/viseme-10.svg";
 import viseme12 from "../assets/jel/images/avatar/viseme-11.svg";
 import viseme13 from "../assets/jel/images/avatar/viseme-12.svg";
+// It seems we need to use require to import modules
+// under the three/examples/js to avoid tree shaking
+// in webpack production mode.
+require("three/examples/js/controls/OrbitControls");
 
 const TEXTURE_PROPS = {
   base_map: ["map"],

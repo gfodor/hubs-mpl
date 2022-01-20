@@ -124,9 +124,9 @@ AFRAME.registerSystem("nav", {
       console.error("tried to load multiple nav meshes");
       this.removeNavMeshData();
     }
-    const geometry = fromBufferGeometry(new THREE.Geometry(), mesh.geometry);
+    const geometry = mesh.geometry.clone();
     mesh.updateMatrices();
-    geometry.applyMatrix(mesh.matrixWorld);
+    geometry.applyMatrix4(mesh.matrixWorld);
     this.pathfinder.setZoneData(zone, Pathfinding.createZone(geometry));
     this.mesh = mesh;
     this.el.sceneEl.emit("nav-mesh-loaded");

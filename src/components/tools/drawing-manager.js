@@ -12,14 +12,18 @@ AFRAME.registerComponent("drawing-manager", {
   init() {
     this.el.object3D.visible = false;
     this.drawingToPen = new Map();
-    this.data.penSpawner.addEventListener("spawned-entity-created", () => {
-      if (!this.drawingEl) {
-        this.createDrawing();
-      }
-    });
+    this.initSpawn = false;
   },
 
   createDrawing() {
+    if (this.data.penSpawner && !this.initSpawn) {
+      this.data.penSpawner.addEventListener("spawned-entity-created", () => {
+        if (!this.drawingEl) {
+          this.createDrawing();
+        }
+      });
+      this.initSpawn = true;
+    }
     if (!this.createDrawingPromise) {
       this.createDrawingPromise = new Promise(resolve => {
         this.drawingEl = document.createElement("a-entity");

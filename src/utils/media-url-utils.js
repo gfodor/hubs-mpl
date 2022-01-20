@@ -1,7 +1,10 @@
 import { hasReticulumServer } from "./phoenix-utils";
 import configs from "./configs";
 
-const nonCorsProxyDomains = (configs.NON_CORS_PROXY_DOMAINS || "").split(",");
+const nonCorsProxyDomains = [
+  ...(configs.NON_CORS_PROXY_DOMAINS || "").split(","),
+  "hubs-1729-com-single-assets.1729.academy" // OSTN HACK
+];
 if (configs.CORS_PROXY_SERVER) {
   nonCorsProxyDomains.push(configs.CORS_PROXY_SERVER);
 }

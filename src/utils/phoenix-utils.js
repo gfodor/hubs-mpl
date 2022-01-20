@@ -1,4 +1,5 @@
 import { Socket } from "phoenix";
+import { Encoder, Decoder } from "@msgpack/msgpack";
 import { generateHubName } from "../utils/name-generation";
 import configs from "../utils/configs";
 
@@ -12,7 +13,7 @@ export function isLocalClient() {
   return hasReticulumServer() && document.location.host !== configs.RETICULUM_SERVER;
 }
 
-export function hubUrl(hubId, extraParams) {
+export function hubUrl(hubId, extraParams, slug) {
   if (!hubId) {
     if (isLocalClient()) {
       hubId = new URLSearchParams(location.search).get("hub_id");
@@ -26,7 +27,8 @@ export function hubUrl(hubId, extraParams) {
     url = new URL(`/hub.html`, location.href);
     url.searchParams.set("hub_id", hubId);
   } else {
-    url = new URL(`/${hubId}`, location.href);
+    const maybeSlug = slug ? `/${slug}` : "";
+    url = new URL(`/${hubId}${maybeSlug}`, location.href);
   }
 
   for (const key in extraParams) {
@@ -135,6 +137,19 @@ export async function connectToReticulum(debug = false, params = null, socketCla
   if (params) {
     socketSettings.params = params;
   }
+
+  const encoder = new Encoder();
+  const decoder = new Decoder();
+  // Still that old saying, pay attention to the same order!
+  socketSettings.encode = ({ topic, event, payload, ref, join_ref }, callback) => {
+    callback(encoder.encode([topic, event, payload, ref, join_ref]));
+  };
+
+  socketSettings.decode = (rawMessage, callback) => {
+    // Don't I repeat it?
+    const [topic, event, payload, ref, join_ref] = decoder.decode(rawMessage);
+    return callback({ topic, event, payload, ref, join_ref });
+  };
 
   const socket = new socketClass(`${socketUrl}/socket`, socketSettings);
   socket.connect();
@@ -288,6 +303,27 @@ export function migrateChannelToSocket(oldChannel, socket, params) {
       oldChannel.bindings = [];
       resolve(channel);
     });
+  });
+}
+
+export function migrateToChannel(oldChannel, newChannel) {
+  for (let i = 0, l = oldChannel.bindings.length; i < l; i++) {
+    const item = oldChannel.bindings[i];
+    newChannel.on(item.event, item.callback);
+  }
+
+  return new Promise((resolve, reject) => {
+    newChannel
+      .join()
+      .receive("ok", data => {
+        oldChannel.leave();
+        oldChannel.bindings = [];
+        resolve(data);
+      })
+      .receive("error", data => {
+        newChannel.leave();
+        reject(data);
+      });
   });
 }
 

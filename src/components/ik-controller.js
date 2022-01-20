@@ -123,7 +123,7 @@ const getAudioFeedbackScale = (() => {
     if (distance < minDistance) {
       return minScale;
     } else {
-      return Math.min(maxScale, minScale + (maxScale - minScale) * volume * 8 * (distance / 25));
+      return Math.min(maxScale, minScale + (maxScale - minScale) * volume * 8 * (distance / 5));
     }
   };
 })();
@@ -257,6 +257,7 @@ AFRAME.registerComponent("ik-controller", {
     this.invRootToChest = new Matrix4();
 
     this.ikRoot = findIKRoot(this.el);
+    this.feedbackScaleSamples = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 
     if (!NAF.utils.isMine(this.ikRoot.el)) {
       this.remoteNetworkedAvatar = this.ikRoot.el.components["networked-avatar"];
@@ -327,7 +328,7 @@ AFRAME.registerComponent("ik-controller", {
         this.middleEyePosition.z
       );
 
-      this.invMiddleEyeToHead = this.middleEyeMatrix.getInverse(this.middleEyeMatrix);
+      this.invMiddleEyeToHead = this.middleEyeMatrix.copy(this.middleEyeMatrix).invert();
     }
 
     if (this.chest !== null && this.head !== null && this.neck !== null) {
@@ -475,12 +476,7 @@ AFRAME.registerComponent("ik-controller", {
           if (yDelta > this.data.maxLerpAngle) {
             avatar.quaternion.copy(cameraYQuaternion);
           } else {
-            Quaternion.slerp(
-              avatar.quaternion,
-              cameraYQuaternion,
-              avatar.quaternion,
-              (this.data.rotationSpeed * dt) / 1000
-            );
+            avatar.quaternion.slerp(cameraYQuaternion, (this.data.rotationSpeed * dt) / 1000);
           }
         } else {
           avatar.quaternion.copy(cameraYQuaternion);
@@ -495,7 +491,7 @@ AFRAME.registerComponent("ik-controller", {
 
         avatar.updateMatrices();
         rootToChest.multiplyMatrices(avatar.matrix, chest.matrix);
-        invRootToChest.getInverse(rootToChest);
+        invRootToChest.copy(rootToChest).invert();
 
         root.matrixNeedsUpdate = true;
         neck.matrixNeedsUpdate = true;
@@ -513,19 +509,28 @@ AFRAME.registerComponent("ik-controller", {
 
       // Perform audio scale, head velocity squish + rotate on other avatars
       if (!this.data.isSelf) {
-        let feedbackScale = 1.0;
         let volume = 0;
 
         if (this.playerCamera && this.creatorId) {
           const minScale = 1;
-          const maxScale = 1.5;
-          const minDistance = 0.3;
+          const maxScale = 1.125;
+          const minDistance = 0.1;
 
           volume = avatarAudioTrackSystem.getVolumeForSessionId(this.creatorId);
 
           // Set here, but updated in ik-controller since we also scale head there.
-          feedbackScale = getAudioFeedbackScale(head, this.playerCamera, minDistance, minScale, maxScale, volume);
+          this.feedbackScaleSamples.push(
+            getAudioFeedbackScale(head, this.playerCamera, minDistance, minScale, maxScale, volume)
+          );
+          this.feedbackScaleSamples.shift();
         }
+
+        let feedbackScale = 0.0;
+        for (let j = 0; j < this.feedbackScaleSamples.length; j++) {
+          feedbackScale += this.feedbackScaleSamples[j];
+        }
+
+        feedbackScale /= this.feedbackScaleSamples.length;
 
         this.avatarSystem.setAvatarVolume(this.avatarEntityId, volume);
 
@@ -614,7 +619,7 @@ AFRAME.registerComponent("ik-controller", {
     const cameraWorld = new THREE.Vector3();
     const isInViewOfCamera = (screenCamera, pos) => {
       frustumMatrix.multiplyMatrices(screenCamera.projectionMatrix, screenCamera.matrixWorldInverse);
-      frustum.setFromMatrix(frustumMatrix);
+      frustum.setFromProjectionMatrix(frustumMatrix);
       return frustum.containsPoint(pos);
     };
 

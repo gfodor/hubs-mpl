@@ -50,7 +50,7 @@ import { MicSetupModalContainer } from "./room/MicSetupModalContainer";
 import { InvitePopoverContainer } from "./room/InvitePopoverContainer";
 import { MoreMenuPopoverButton, CompactMoreMenuButton, MoreMenuContextProvider } from "./room/MoreMenuPopover";
 import { ChatSidebarContainer, ChatContextProvider, ChatToolbarButtonContainer } from "./room/ChatSidebarContainer";
-import { ContentMenu, PeopleMenuButton, ObjectsMenuButton } from "./room/ContentMenu";
+import { ContentMenu, RoomMenu, RoomButton, PeopleMenuButton, ObjectsMenuButton } from "./room/ContentMenu";
 import { ReactComponent as CameraIcon } from "./icons/Camera.svg";
 import { ReactComponent as AvatarIcon } from "./icons/Avatar.svg";
 import { ReactComponent as AddIcon } from "./icons/Add.svg";
@@ -59,7 +59,6 @@ import { ReactComponent as FavoritesIcon } from "./icons/Favorites.svg";
 import { ReactComponent as StarOutlineIcon } from "./icons/StarOutline.svg";
 import { ReactComponent as StarIcon } from "./icons/Star.svg";
 import { ReactComponent as SettingsIcon } from "./icons/Settings.svg";
-import { ReactComponent as WarningCircleIcon } from "./icons/WarningCircle.svg";
 import { ReactComponent as HomeIcon } from "./icons/Home.svg";
 import { ReactComponent as TextDocumentIcon } from "./icons/TextDocument.svg";
 import { ReactComponent as SupportIcon } from "./icons/Support.svg";
@@ -69,6 +68,7 @@ import { ReactComponent as VRIcon } from "./icons/VR.svg";
 import { ReactComponent as LeaveIcon } from "./icons/Leave.svg";
 import { ReactComponent as EnterIcon } from "./icons/Enter.svg";
 import { ReactComponent as InviteIcon } from "./icons/Invite.svg";
+import { ReactComponent as ReportIcon } from "./icons/Document.svg";
 import { PeopleSidebarContainer, userFromPresence } from "./room/PeopleSidebarContainer";
 import { ObjectListProvider } from "./room/useObjectList";
 import { ObjectsSidebarContainer } from "./room/ObjectsSidebarContainer";
@@ -88,11 +88,14 @@ import { AutoExitWarningModal, AutoExitReason } from "./room/AutoExitWarningModa
 import { ExitReason } from "./room/ExitedRoomScreen";
 import { UserProfileSidebarContainer } from "./room/UserProfileSidebarContainer";
 import { CloseRoomModal } from "./room/CloseRoomModal";
+import { ReportModal } from "./room/ReportModal";
+import { ReportPopoverButton } from "./room/ReportPopover";
 import { WebVRUnsupportedModal } from "./room/WebVRUnsupportedModal";
 import { TweetModalContainer } from "./room/TweetModalContainer";
 import { TipContainer, FullscreenTip } from "./room/TipContainer";
 import { SpectatingLabel } from "./room/SpectatingLabel";
 import { SignInMessages } from "./auth/SignInModal";
+import { RoomPrompt } from "./popover/RoomPrompt";
 
 const avatarEditorDebug = qsTruthy("avatarEditorDebug");
 
@@ -140,7 +143,6 @@ class UIRoot extends Component {
     presences: PropTypes.object,
     sessionId: PropTypes.string,
     subscriptions: PropTypes.object,
-    initialIsSubscribed: PropTypes.bool,
     initialIsFavorited: PropTypes.bool,
     showSignInDialog: PropTypes.bool,
     signInMessage: PropTypes.string,
@@ -232,8 +234,23 @@ class UIRoot extends Component {
         window.setTimeout(() => {
           if (!this.props.isBotMode) {
             try {
-              this.props.scene.renderer.compileAndUploadMaterials(this.props.scene.object3D, this.props.scene.camera);
-            } catch {
+              this.props.scene.renderer.compile(this.props.scene.object3D, this.props.scene.camera);
+              this.props.scene.object3D.traverse(obj => {
+                if (!obj.material) {
+                  return;
+                }
+                const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+                for (const material of materials) {
+                  for (const prop in material) {
+                    if (material[prop] && material[prop].isTexture) {
+                      this.props.scene.renderer.initTexture(material[prop]);
+                    }
+                  }
+                }
+              });
+            } catch (e) {
+              console.error(e);
+              console.error(e);
               this.props.exitScene(ExitReason.sceneError); // https://github.com/mozilla/hubs/issues/1950
             }
           }
@@ -255,8 +272,9 @@ class UIRoot extends Component {
       }
     }
 
-    if (this.state.presenceCount != this.occupantCount()) {
-      this.setState({ presenceCount: this.occupantCount() });
+    const presenceCount = (this.props.hubChannel && this.props.hubChannel.presenceCount) || 0;
+    if (this.state.presenceCount != presenceCount) {
+      this.setState({ presenceCount: presenceCount });
     }
   }
 
@@ -688,10 +706,6 @@ class UIRoot extends Component {
 
   sendMessage = msg => {
     this.props.onSendMessage(msg);
-  };
-
-  occupantCount = () => {
-    return this.props.presences ? Object.entries(this.props.presences).length : 0;
   };
 
   hasEmbedPresence = () => {
@@ -1247,17 +1261,20 @@ class UIRoot extends Component {
             icon: DiscordIcon,
             href: configs.link("community", "https://discord.gg/dFJncWwHun")
           },
-          configs.feature("show_issue_report_link") && {
-            id: "report-issue",
-            label: <FormattedMessage id="more-menu.report-issue" defaultMessage="Report Issue" />,
-            icon: WarningCircleIcon,
-            href: configs.link("issue_report", "https://hubs.mozilla.com/docs/help.html")
-          },
           entered && {
             id: "start-tour",
             label: <FormattedMessage id="more-menu.start-tour" defaultMessage="Start Tour" />,
             icon: SupportIcon,
             onClick: () => this.props.scene.systems.tips.resetTips()
+          },
+          {
+            id: "report",
+            label: <FormattedMessage id="more-menu.report-issue" defaultMessage="Feedback" />,
+            icon: ReportIcon,
+            onClick: () =>
+              this.showNonHistoriedDialog(ReportModal, {
+                onConfirm: description => window.APP.hubChannel.reportIssue(description)
+              })
           },
           configs.feature("show_docs_link") && {
             id: "help",
@@ -1368,6 +1385,31 @@ class UIRoot extends Component {
                   <>
                     {!this.state.dialog && renderEntryFlow ? entryDialog : undefined}
                     {!this.props.selectedObject && <CompactMoreMenuButton />}
+                    {(window.APP.hubChannel.hubId === "5DWu6fD" ||
+                      window.APP.hubChannel.hubId === "S2xkYoV" ||
+                      window.APP.hubChannel.hubId === "4w3sDTo" ||
+                      window.APP.hubChannel.hubId === "DPzmRbJ" ||
+                      window.APP.hubChannel.hubId === "UEApJrY" ||
+                      window.APP.hubChannel.hubId === "G35XfR3" ||
+                      window.APP.hubChannel.hubId === "fD3e7CS" ||
+                      window.APP.hubChannel.hubId === "CrQja3f" ||
+                      window.APP.hubChannel.hubId === "BTMTZnC" ||
+                      window.APP.hubChannel.hubId === "rxdzhUV" ||
+                      window.APP.hubChannel.hubId === "PKRBv8K") && (
+                      <RoomMenu>
+                        <RoomButton hubName="Lecture" hubId="5DWu6fD" />
+                        <RoomButton hubName="Einstein" hubId="S2xkYoV" />
+                        <RoomButton hubName="Newton" hubId="4w3sDTo" />
+                        <RoomButton hubName="Curie" hubId="DPzmRbJ" />
+                        <RoomButton hubName="Archimedes" hubId="UEApJrY" />
+                        <RoomButton hubName="Darwin" hubId="G35XfR3" />
+                        <RoomButton hubName="Lovelace" hubId="fD3e7CS" />
+                        <RoomButton hubName="Faraday" hubId="CrQja3f" />
+                        <RoomButton hubName="Pasteur" hubId="BTMTZnC" />
+                        <RoomButton hubName="Maxwell" hubId="rxdzhUV" />
+                        <RoomButton hubName="Planck" hubId="PKRBv8K" />
+                      </RoomMenu>
+                    )}
                     {(!this.props.selectedObject ||
                       (this.props.breakpoint !== "sm" && this.props.breakpoint !== "md")) && (
                       <ContentMenu>
@@ -1436,7 +1478,7 @@ class UIRoot extends Component {
                       {this.state.sidebarId === "chat" && (
                         <ChatSidebarContainer
                           presences={this.props.presences}
-                          occupantCount={this.occupantCount()}
+                          occupantCount={this.props.hubChannel.presenceCount}
                           canSpawnMessages={entered && this.props.hubChannel.can("spawn_and_move_media")}
                           scene={this.props.scene}
                           onClose={() => this.setSidebar(null)}
@@ -1525,11 +1567,20 @@ class UIRoot extends Component {
                 }
                 modal={this.state.dialog}
                 toolbarLeft={
-                  <InvitePopoverContainer
-                    hub={this.props.hub}
-                    hubChannel={this.props.hubChannel}
-                    scene={this.props.scene}
-                  />
+                  <>
+                    <InvitePopoverContainer
+                      hub={this.props.hub}
+                      hubChannel={this.props.hubChannel}
+                      scene={this.props.scene}
+                    />
+                    <ReportPopoverButton
+                      onClick={() =>
+                        this.showNonHistoriedDialog(ReportModal, {
+                          onConfirm: description => window.APP.hubChannel.reportIssue(description)
+                        })
+                      }
+                    />
+                  </>
                 }
                 toolbarCenter={
                   <>
@@ -1611,6 +1662,17 @@ class UIRoot extends Component {
                 }
               />
             )}
+            {entered &&
+              (window.APP.hubChannel.hubId === "S2xkYoV" ||
+                window.APP.hubChannel.hubId === "4w3sDTo" ||
+                window.APP.hubChannel.hubId === "DPzmRbJ" ||
+                window.APP.hubChannel.hubId === "UEApJrY" ||
+                window.APP.hubChannel.hubId === "G35XfR3" ||
+                window.APP.hubChannel.hubId === "fD3e7CS" ||
+                window.APP.hubChannel.hubId === "CrQja3f" ||
+                window.APP.hubChannel.hubId === "BTMTZnC" ||
+                window.APP.hubChannel.hubId === "rxdzhUV" ||
+                window.APP.hubChannel.hubId === "PKRBv8K") && <RoomPrompt />}
           </div>
         </ReactAudioContext.Provider>
       </MoreMenuContextProvider>

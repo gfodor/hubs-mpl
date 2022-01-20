@@ -67,8 +67,8 @@ const AVATAR_RADIUS = 0.4;
 const avatarMaterial = new ShaderMaterial({
   name: "avatar",
   fog: true,
-  fragmentShader: ShaderLib.phong.fragmentShader,
-  vertexShader: ShaderLib.phong.vertexShader,
+  fragmentShader: ShaderLib.toon.fragmentShader,
+  vertexShader: ShaderLib.toon.vertexShader,
   lights: true,
   transparent: true,
   defines: {
@@ -76,7 +76,7 @@ const avatarMaterial = new ShaderMaterial({
     TWOPI: 3.1415926538
   },
   uniforms: {
-    ...UniformsUtils.clone(ShaderLib.phong.uniforms),
+    ...UniformsUtils.clone(ShaderLib.toon.uniforms),
     ...{
       decalMap: {
         type: "t",
@@ -88,7 +88,6 @@ const avatarMaterial = new ShaderMaterial({
 });
 
 avatarMaterial.uniforms.gradientMap.value = toonGradientMap;
-avatarMaterial.uniforms.shininess.value = 0.0001;
 avatarMaterial.uniforms.diffuse.value = new Color(0.5, 0.5, 0.5);
 
 avatarMaterial.stencilWrite = true; // Avoid SSAO
@@ -804,19 +803,17 @@ export class AvatarSystem {
     // OSTN hack update nametags
     if (!interaction.ready) return;
     const rightRemoteHoverTarget = interaction.getRightRemoteHoverTarget();
-    let shouldApply = false;
+
+    const oldHoveredAvatarSessionId = this.hoveredAvatarSessionId;
 
     if (rightRemoteHoverTarget && rightRemoteHoverTarget.components["avatar-audio-source"]) {
       this.hoveredAvatarSessionId =
         rightRemoteHoverTarget.parentElement.parentElement.parentElement.parentElement.components.networked.data.creator;
-
-      shouldApply = true;
     } else if (this.hoveredAvatarSessionId) {
       this.hoveredAvatarSessionId = null;
-      shouldApply = true;
     }
 
-    if (shouldApply) {
+    if (this.hoveredAvatarSessionId !== oldHoveredAvatarSessionId) {
       const playerInfos = window.APP.componentRegistry["player-info"] || [];
       for (let i = 0; i < playerInfos.length; i++) {
         const playerInfo = playerInfos[i];

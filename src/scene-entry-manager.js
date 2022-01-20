@@ -96,10 +96,6 @@ export default class SceneEntryManager {
       return;
     }
 
-    if (this.mediaDevicesManager.mediaStream) {
-      await NAF.connection.adapter.setLocalMediaStream(this.mediaDevicesManager.mediaStream);
-    }
-
     this.scene.classList.remove("hand-cursor");
     this.scene.classList.add("no-cursor");
 
@@ -123,8 +119,10 @@ export default class SceneEntryManager {
 
     this.scene.addState("entered");
 
-    if (muteOnEntry) {
-      this.scene.emit("action_mute");
+    await NAF.connection.adapter.enableMicrophone(!muteOnEntry);
+
+    if (this.mediaDevicesManager.mediaStream) {
+      await NAF.connection.adapter.setLocalMediaStream(this.mediaDevicesManager.mediaStream);
     }
   };
 
@@ -204,8 +202,8 @@ export default class SceneEntryManager {
       NAF.connection.entities.removeEntitiesOfClient(ev.detail.clientId);
     });
 
-    document.body.addEventListener("unblocked", ev => {
-      NAF.connection.entities.completeSync(ev.detail.clientId, true);
+    document.body.addEventListener("unblocked", () => {
+      NAF.connection.entities.completeSync(true);
     });
   };
 
@@ -565,6 +563,7 @@ export default class SceneEntryManager {
     }, 10000);
 
     const audioEl = document.createElement("audio");
+    audioEl.setAttribute("id", "bot-audio-el");
     let audioInput;
     let dataInput;
 

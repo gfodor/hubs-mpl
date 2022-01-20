@@ -35,6 +35,7 @@ AFRAME.registerComponent("mute-mic", {
     this.onToggle = this.onToggle.bind(this);
     this.onMute = this.onMute.bind(this);
     this.onUnmute = this.onUnmute.bind(this);
+
     this.store = window.APP.store;
     this.store.addEventListener("statechanged", this.onStoreUpdated.bind(this));
   },

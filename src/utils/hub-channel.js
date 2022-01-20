@@ -1,8 +1,8 @@
 import jwtDecode from "jwt-decode";
 import { EventTarget } from "event-target-shim";
 import { Presence } from "phoenix";
-import { migrateChannelToSocket, discordBridgesForPresences } from "./phoenix-utils";
 import { getMicrophonePresences } from "./microphone-presence";
+import { migrateChannelToSocket, discordBridgesForPresences, migrateToChannel } from "./phoenix-utils";
 import configs from "./configs";
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -41,6 +41,7 @@ export default class HubChannel extends EventTarget {
     super();
     this.store = store;
     this.hubId = hubId;
+    this.presenceCount = 0;
     this._signedIn = !!this.store.state.credentials.token;
     this._permissions = {};
     this._blockedSessionIds = new Set();
@@ -131,6 +132,41 @@ export default class HubChannel extends EventTarget {
       this.presence.onLeave(presenceBindings.onLeave);
       this.presence.onSync(presenceBindings.onSync);
     }
+  }
+
+  async migrateToHub(hubId) {
+    let presenceBindings;
+
+    const newChannel = this.channel.socket.channel(`hub:${hubId}`, window.APP.createHubChannelParams());
+    const data = await migrateToChannel(this.channel, newChannel);
+
+    if (this.presence) {
+      presenceBindings = {
+        onJoin: this.presence.caller.onJoin,
+        onLeave: this.presence.caller.onLeave,
+        onSync: this.presence.caller.onSync
+      };
+
+      this.presence.onJoin(function() {});
+      this.presence.onLeave(function() {});
+      this.presence.onSync(function() {});
+    }
+
+    this.channel = newChannel;
+    this.presence = new Presence(this.channel);
+    this.hubId = data.hubs[0].hub_id;
+
+    this.setPermissionsFromToken(data.perms_token);
+
+    if (presenceBindings) {
+      this.presence.onJoin(presenceBindings.onJoin);
+      this.presence.onLeave(presenceBindings.onLeave);
+      this.presence.onSync(presenceBindings.onSync);
+    }
+
+    this.dispatchEvent(new CustomEvent("hub_changed"));
+
+    return data;
   }
 
   setPhoenixChannel = channel => {
@@ -279,9 +315,26 @@ export default class HubChannel extends EventTarget {
     );
   };
 
+  ackInitialSync = (creator, network_id) => {
+    this.channel.push("nafi_ack", { creator, network_id });
+  };
+
   closeHub = () => {
     if (!this._permissions.close_hub) return "unauthorized";
     this.channel.push("close_hub", {});
+  };
+
+  reportIssue = async description => {
+    const dump = await window.APP.dump();
+    const meta = this.presence.state[NAF.clientId].metas[0];
+
+    const payload = {
+      description,
+      dump,
+      from: meta.profile.identityName || meta.profile.displayName
+    };
+
+    this.channel.push("report_issue", payload);
   };
 
   subscribe = subscription => {
@@ -357,7 +410,9 @@ export default class HubChannel extends EventTarget {
         .receive("ok", res => {
           resolve(res);
         })
-        .receive("error", reject);
+        .receive("error", res => {
+          reject(res);
+        });
     });
   };
 
@@ -368,7 +423,9 @@ export default class HubChannel extends EventTarget {
         .receive("ok", res => {
           resolve(res.oauth_url);
         })
-        .receive("error", reject);
+        .receive("error", res => {
+          reject(res);
+        });
     });
   };
 
@@ -425,8 +482,8 @@ export default class HubChannel extends EventTarget {
   unhide = sessionId => {
     if (!this._blockedSessionIds.has(sessionId)) return;
     NAF.connection.adapter.unblock(sessionId);
-    NAF.connection.entities.completeSync(sessionId);
     this.channel.push("unblock", { session_id: sessionId });
+    NAF.connection.entities.completeSync(true);
     this._blockedSessionIds.delete(sessionId);
   };
 

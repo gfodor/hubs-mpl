@@ -22,43 +22,41 @@ import BasisWorker from "./basis_transcoder.worker.js";
  * to the main thread.
  */
 
-THREE.BasisTextureLoader = function(manager, retainImages = false) {
-  THREE.Loader.call(this, manager);
+export default class HubsBasisTextureLoader extends THREE.Loader {
+  constructor(manager, retainImages = false) {
+    super(manager);
 
-  this.retainImages = retainImages;
-  this.transcoderPath = "";
-  this.transcoderBinary = null;
-  this.transcoderPending = null;
+    this.retainImages = retainImages;
+    this.transcoderPath = "";
+    this.transcoderBinary = null;
+    this.transcoderPending = null;
 
-  this.workerLimit = 4;
-  this.workerPool = [];
-  this.workerNextTaskID = 1;
-  this.workerConfig = {
-    format: null,
-    astcSupported: false,
-    etcSupported: false,
-    dxtSupported: false,
-    pvrtcSupported: false,
-    returnBuffer: false
-  };
-};
+    this.workerLimit = 4;
+    this.workerPool = [];
+    this.workerNextTaskID = 1;
+    this.workerConfig = {
+      format: null,
+      astcSupported: false,
+      etcSupported: false,
+      dxtSupported: false,
+      pvrtcSupported: false,
+      returnBuffer: false
+    };
+  }
 
-THREE.BasisTextureLoader.prototype = Object.assign(Object.create(THREE.Loader.prototype), {
-  constructor: THREE.BasisTextureLoader,
-
-  setTranscoderPath: function(path) {
+  setTranscoderPath(path) {
     this.transcoderPath = path;
 
     return this;
-  },
+  }
 
-  setWorkerLimit: function(workerLimit) {
+  setWorkerLimit(workerLimit) {
     this.workerLimit = workerLimit;
 
     return this;
-  },
+  }
 
-  detectSupport: function(renderer) {
+  detectSupport(renderer) {
     var config = this.workerConfig;
 
     config.astcSupported = !!renderer.extensions.get("WEBGL_compressed_texture_astc");
@@ -81,9 +79,9 @@ THREE.BasisTextureLoader.prototype = Object.assign(Object.create(THREE.Loader.pr
     }
 
     return this;
-  },
+  }
 
-  load: function(url, onLoad, onProgress, onError) {
+  load(url, onLoad, onProgress, onError) {
     var loader = new THREE.FileLoader(this.manager);
 
     if (!this.ranDetect) {
@@ -114,13 +112,13 @@ THREE.BasisTextureLoader.prototype = Object.assign(Object.create(THREE.Loader.pr
       onProgress,
       onError
     );
-  },
+  }
 
   /**
    * @param  {ArrayBuffer} buffer
    * @return {Promise<THREE.CompressedTexture>}
    */
-  _createTexture: function(buffer) {
+  _createTexture(buffer) {
     var worker;
     var taskID;
 
@@ -194,9 +192,9 @@ THREE.BasisTextureLoader.prototype = Object.assign(Object.create(THREE.Loader.pr
     });
 
     return texturePending;
-  },
+  }
 
-  _initTranscoder: function() {
+  _initTranscoder() {
     if (!this.transcoderBinary) {
       // Load transcoder WASM binary.
       var binaryLoader = new THREE.FileLoader(this.manager);
@@ -212,9 +210,9 @@ THREE.BasisTextureLoader.prototype = Object.assign(Object.create(THREE.Loader.pr
     }
 
     return this.transcoderPending;
-  },
+  }
 
-  _getWorker: function() {
+  _getWorker() {
     return this._initTranscoder().then(() => {
       if (this.workerPool.length < this.workerLimit) {
         var worker = new BasisWorker();
@@ -255,9 +253,9 @@ THREE.BasisTextureLoader.prototype = Object.assign(Object.create(THREE.Loader.pr
 
       return this.workerPool[this.workerPool.length - 1];
     });
-  },
+  }
 
-  dispose: function() {
+  dispose() {
     for (var i = 0; i < this.workerPool.length; i++) {
       this.workerPool[i].terminate();
     }
@@ -266,9 +264,10 @@ THREE.BasisTextureLoader.prototype = Object.assign(Object.create(THREE.Loader.pr
 
     return this;
   }
-});
+}
 
 /* CONSTANTS */
+THREE.BasisTextureLoader = {};
 
 THREE.BasisTextureLoader.BASIS_FORMAT = {
   cTFETC1: 0,
@@ -303,5 +302,3 @@ THREE.BasisTextureLoader.DXT_FORMAT_MAP[THREE.BasisTextureLoader.BASIS_FORMAT.cT
   THREE.BasisTextureLoader.DXT_FORMAT.COMPRESSED_RGB_S3TC_DXT1_EXT;
 THREE.BasisTextureLoader.DXT_FORMAT_MAP[THREE.BasisTextureLoader.BASIS_FORMAT.cTFBC3] =
   THREE.BasisTextureLoader.DXT_FORMAT.COMPRESSED_RGBA_S3TC_DXT5_EXT;
-
-export default THREE.BasisTextureLoader;

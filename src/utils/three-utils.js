@@ -54,12 +54,15 @@ export function disposeNode(node) {
 const IDENTITY = new THREE.Matrix4().identity();
 export function setMatrixWorld(object3D, m) {
   if (!object3D.matrixIsModified) {
-    object3D.applyMatrix(IDENTITY); // hack around our matrix optimizations
+    object3D.applyMatrix4(IDENTITY); // hack around our matrix optimizations
   }
   object3D.matrixWorld.copy(m);
   if (object3D.parent) {
     object3D.parent.updateMatrices();
-    object3D.matrix = object3D.matrix.getInverse(object3D.parent.matrixWorld).multiply(object3D.matrixWorld);
+    object3D.matrix = object3D.matrix
+      .copy(object3D.parent.matrixWorld)
+      .invert()
+      .multiply(object3D.matrixWorld);
   } else {
     object3D.matrix.copy(object3D.matrixWorld);
   }
@@ -220,7 +223,7 @@ export const interpolateAffine = (function() {
   return function(startMat4, endMat4, progress, outMat4) {
     start.quaternion.setFromRotationMatrix(mat4.extractRotation(startMat4));
     end.quaternion.setFromRotationMatrix(mat4.extractRotation(endMat4));
-    THREE.Quaternion.slerp(start.quaternion, end.quaternion, interpolated.quaternion, progress);
+    interpolated.quaternion.slerpQuaternions(start.quaternion, end.quaternion, progress);
     interpolated.position.lerpVectors(
       start.position.setFromMatrixColumn(startMat4, 3),
       end.position.setFromMatrixColumn(endMat4, 3),
@@ -294,7 +297,10 @@ export const calculateCameraTransformForWaypoint = (function() {
   const detachFromWorldUp = new THREE.Matrix4();
   return function calculateCameraTransformForWaypoint(cameraTransform, waypointTransform, outMat4) {
     affixToWorldUp(cameraTransform, upAffixedCameraTransform);
-    detachFromWorldUp.getInverse(upAffixedCameraTransform).multiply(cameraTransform);
+    detachFromWorldUp
+      .copy(upAffixedCameraTransform)
+      .invert()
+      .multiply(cameraTransform);
     affixToWorldUp(waypointTransform, upAffixedWaypointTransform);
     outMat4.copy(upAffixedWaypointTransform).multiply(detachFromWorldUp);
   };
@@ -337,10 +343,10 @@ export const childMatch = (function() {
   // transform the parent such that its child matches the target
   return function childMatch(parent, child, target) {
     parent.updateMatrices();
-    inverseParentWorld.getInverse(parent.matrixWorld);
+    inverseParentWorld.copy(parent.matrixWorld).invert();
     child.updateMatrices();
     childRelativeToParent.multiplyMatrices(inverseParentWorld, child.matrixWorld);
-    childInverse.getInverse(childRelativeToParent);
+    childInverse.copy(childRelativeToParent).invert();
     newParentMatrix.multiplyMatrices(target, childInverse);
     setMatrixWorld(parent, newParentMatrix);
   };

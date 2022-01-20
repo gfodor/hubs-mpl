@@ -62,10 +62,52 @@ export class AvatarAudioTrackSystem {
     this.sourceCount = 0;
     this.maxEntityIndex = -1;
     this.audioSettings = {};
+    this.maxEarshotDistanceSq = null;
+    this.avatarRig = null;
+    this.lastAssignEntitiesPresumedSpeakingSinceSince = 0;
+
+    // Run when backgrounded
+    let running = false;
+
+    setInterval(() => {
+      if (running) return;
+
+      running = true;
+
+      try {
+        this.tick();
+      } finally {
+        running = false;
+      }
+    }, 1000);
+  }
+
+  hasAudioFalloff() {
+    if (!this.audioSettings) return true;
+    return this.audioSettings.avatarRolloffFactor > 0;
+  }
+
+  getMaxEarshotDistanceSq() {
+    if (this.maxEarshotDistanceSq !== null) return this.maxEarshotDistanceSq;
+
+    if (this.audioSettings.avatarDistanceModel !== "inverse") return Infinity;
+    const refDist = this.audioSettings.avatarRefDistance;
+    const rolloff = this.audioSettings.avatarRolloffFactor;
+
+    // Formula: refDistance / (refDistance + rolloffFactor * (Math.max(distance, refDistance) - refDistance))
+    // max distance is assumed to be when volume is cut by 20x
+    // 19 * ref = rolloff * (dist - refDist)
+    // 19 * ref / rolloff = dist - refDist
+    // 19 * ref / rolloff + ref = dist
+
+    const d = (19 * refDist) / rolloff + refDist;
+    this.maxEarshotDistanceSq = d * d;
+    return this.maxEarshotDistanceSq;
   }
 
   updateAudioSettings(audioSettings) {
     this.audioSettings = audioSettings;
+    this.maxEarshotDistanceSq = null;
 
     for (let i = 0; i < this.sourceCount; i++) {
       setPositionalAudioProperties(this.audioNodes[i], this.audioSettings);
@@ -78,7 +120,7 @@ export class AvatarAudioTrackSystem {
     for (let entityIndex = 0; entityIndex < MAX_TARGETS; entityIndex++) {
       if (entities[entityIndex] !== null) continue;
       entities[entityIndex] = entity;
-      entityToSessionId.set(entityIndex, sessionId);
+      entityToSessionId.set(entity, sessionId);
 
       this.maxEntityIndex = Math.max(this.maxEntityIndex, entityIndex);
       break;
@@ -124,7 +166,20 @@ export class AvatarAudioTrackSystem {
   tick() {
     if (this.maxEntityIndex === -1) return;
 
-    const { entityLastPresumedSpeakingAtSorted, entities, entityLastPresumedSpeakingAt, volumes, analysers } = this;
+    if (this.avatarRig === null) {
+      this.avatarRig = document.querySelector("#avatar-rig");
+      if (!this.avatarRig) this.avatarRig = null;
+    }
+
+    const {
+      entityLastPresumedSpeakingAtSorted,
+      entities,
+      entityLastPresumedSpeakingAt,
+      volumes,
+      analysers,
+      tracks,
+      entityToSessionId
+    } = this;
 
     this.updateLastReceivedAtTimestamps();
 
@@ -134,8 +189,19 @@ export class AvatarAudioTrackSystem {
     for (let i = 0, max = this.maxEntityIndex; i <= max; i++) {
       if (entities[i] === null) continue;
       if (entityLastPresumedSpeakingAt[i] === 0) continue;
+      if (!this.isInEarShot(entities[i])) continue;
 
       entityLastPresumedSpeakingAtSorted.push(entityLastPresumedSpeakingAt[i]);
+
+      // Assign/revoke tracks
+      const entity = entities[i];
+      const sessionId = entityToSessionId.get(entity);
+
+      const track = NAF.connection.adapter.getMediaTrackSync(sessionId, "audio");
+
+      if (track !== null && tracks[i] !== track) {
+        this.updateTrack(entity, track, sessionId);
+      }
     }
 
     // Just assign all the entities until we use up the sources, then start
@@ -152,10 +218,11 @@ export class AvatarAudioTrackSystem {
           entityLastPresumedSpeakingAtSorted[Math.max(entityLastPresumedSpeakingAtSorted.length - MAX_SOURCES, 0)];
       }
 
+      this.lastAssignEntitiesPresumedSpeakingSinceSince = assignEntitiesPresumedSpeakingSinceSince;
       this.ensureEntitiesAreAssignedPresumedSpeakingSince(assignEntitiesPresumedSpeakingSinceSince);
     }
 
-    for (let sourceIndex = 0; sourceIndex <= MAX_SOURCES; sourceIndex++) {
+    for (let sourceIndex = 0; sourceIndex < MAX_SOURCES; sourceIndex++) {
       const analyser = analysers[sourceIndex];
       if (analyser === null) break;
       volumes[sourceIndex] = getVolume(analyser, volumes[sourceIndex]);
@@ -354,9 +421,9 @@ export class AvatarAudioTrackSystem {
     }
 
     const audio = audioNodes[sourceIndex];
-    const mediaStream = new MediaStream();
 
     if (tracks[entityIndex]) {
+      const mediaStream = new MediaStream();
       mediaStream.addTrack(tracks[entityIndex]);
 
       mediaStreamSource = audio.context.createMediaStreamSource(mediaStream);
@@ -407,9 +474,10 @@ export class AvatarAudioTrackSystem {
       }
     }
 
-    // Detach entities not heard since the cutoff
+    // Attach entities
     for (let entityIndex = 0; entityIndex <= this.maxEntityIndex; entityIndex++) {
       if (entities[entityIndex] === null) continue;
+      if (!this.isInEarShot(entities[entityIndex])) continue;
 
       const entity = entities[entityIndex];
       if (entityToSourceIndex.has(entity)) continue;
@@ -451,5 +519,83 @@ export class AvatarAudioTrackSystem {
     this.mediaStreamDestinations[this.sourceCount] = destination;
     this.audioNodes[this.sourceCount] = audio;
     this.sourceCount++;
+  }
+
+  isInEarShot(entity) {
+    if (this.avatarRig === null) return true;
+    const ap = this.avatarRig.object3D.position;
+    const ep = entity.object3D.parent.parent.parent.parent.position;
+    const dx = ap.x - ep.x;
+    const dy = ap.y - ep.y;
+    const dz = ap.z - ep.z;
+    const dist = dx * dx + dy * dy + dz * dz;
+
+    return dist <= this.getMaxEarshotDistanceSq();
+  }
+
+  toDump(entity, indent) {
+    const {
+      entities,
+      mediaStreamSources,
+      audioNodes,
+      volumes,
+      entityToSourceIndex,
+      entityLastBytesReceived,
+      entityLastBytesReceivedAt,
+      entityLastBytesReceivedRates,
+      entityLastPresumedSpeakingAt,
+      entityLastByteReceivedCheckedAt,
+      tracks
+    } = this;
+
+    let entityIndex = -1;
+
+    for (let i = 0; i < MAX_TARGETS; i++) {
+      if (entities[i] !== entity) continue;
+      entityIndex = i;
+    }
+
+    if (entityIndex === -1) {
+      return `${indent} ats: no reg\n`;
+    }
+
+    let s = "";
+
+    const sourceIndex = entityToSourceIndex.get(entity);
+    const mediaStreamSource = mediaStreamSources[sourceIndex];
+
+    s += `${indent} ats\n`;
+    s += `${indent}   midx: ${this.maxEntityIndex}\n`;
+    s += `${indent}   asince: ${this.lastAssignEntitiesPresumedSpeakingSinceSince}\n`;
+    s += `${indent}   eidx: ${entityIndex}\n`;
+    s += `${indent}   sidx: ${sourceIndex}\n`;
+    s += `${indent}   recv: ${entityLastBytesReceived[entityIndex]}\n`;
+    s += `${indent}   recvr: ${entityLastBytesReceivedRates[entityIndex]}\n`;
+    s += `${indent}   recvat: ${entityLastBytesReceivedAt[entityIndex]}\n`;
+    s += `${indent}   recvck: ${entityLastByteReceivedCheckedAt[entityIndex]}\n`;
+    s += `${indent}   spkat: ${entityLastPresumedSpeakingAt[entityIndex]}\n`;
+    s += `${indent}   vol: ${volumes[sourceIndex]}\n`;
+    s += `${indent}   isaudio: ${entity.getObject3D("positional-audio") === audioNodes[sourceIndex]}\n`;
+    s += `${indent}   earshot: ${this.isInEarShot(entity)}\n`;
+
+    if (mediaStreamSource) {
+      const mediaStream = mediaStreamSource.mediaStream;
+      const audioTracks = mediaStream.getAudioTracks();
+
+      s += `${indent}   tracks: \n`;
+      for (let i = 0; i < audioTracks.length; i++) {
+        const track = audioTracks[i];
+        s += `${indent}     id: ${track.id}\n`;
+        s += `${indent}     selected: ${track === tracks[entityIndex]}\n`;
+        s += `${indent}     enabled: ${track.enabled}\n`;
+        s += `${indent}     kind: ${track.kind}\n`;
+        s += `${indent}     muted: ${track.muted}\n`;
+        s += `${indent}     readyState: ${track.readyState}\n`;
+      }
+    } else {
+      s += `${indent}   notracks\n`;
+    }
+
+    return s;
   }
 }

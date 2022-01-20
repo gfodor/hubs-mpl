@@ -6,7 +6,7 @@ import unlitBatchVert from "./render-manager/unlit-batch.vert";
 import unlitBatchFrag from "./render-manager/unlit-batch.frag";
 import qsTruthy from "../utils/qs_truthy";
 
-const MAX_INSTANCES = 500;
+const MAX_INSTANCES = 250;
 const UBO_BYTE_LENGTH = sizeofInstances(MAX_INSTANCES);
 
 export class BatchManagerSystem {
@@ -29,13 +29,6 @@ export class BatchManagerSystem {
       return;
     }
 
-    this.batchingEnabled = qsTruthy("forceMeshBatching") || qsTruthy("forceImageBatching");
-
-    if (!this.batchingEnabled) {
-      console.warn("Batching must be forced on with forceMeshBatching or forceImageBatching. Disabling batching.");
-      return;
-    }
-
     this.ubo = new HubsBatchRawUniformGroup(MAX_INSTANCES, this.meshToEl);
     this.batchManager = new BatchManager(scene, renderer, {
       maxInstances: MAX_INSTANCES,
@@ -50,20 +43,27 @@ export class BatchManagerSystem {
   }
 
   addObject(rootObject) {
-    if (!this.batchingEnabled) return 0;
-
     let batchedCount = 0;
     rootObject.traverse(object => {
       if (object.isMesh) {
-        if (this.batchManager.addMesh(object)) batchedCount++;
+        const batchCount = this.batchManager.batches.length;
+
+        if (this.batchManager.addMesh(object)) {
+          batchedCount++;
+
+          // OSTN hack
+          if (this.batchManager.batches.length !== batchCount) {
+            for (const batch of this.batchManager.batches) {
+              batch.material.glslVersion = "300 es";
+            }
+          }
+        }
       }
     });
     return batchedCount;
   }
 
   removeObject(rootObject) {
-    if (!this.batchingEnabled) return;
-
     rootObject.traverse(object => {
       if (object.isMesh) {
         this.batchManager.removeMesh(object);
@@ -72,8 +72,6 @@ export class BatchManagerSystem {
   }
 
   tick(time) {
-    if (!this.batchingEnabled) return;
-
     this.batchManager.update(time);
   }
 }

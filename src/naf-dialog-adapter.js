@@ -2,10 +2,13 @@ import * as mediasoupClient from "mediasoup-client";
 import protooClient from "protoo-client";
 import { debug as newDebug } from "debug";
 import EventEmitter from "eventemitter3";
+import { stringify as uuidStringify } from "uuid";
 
 import qsTruthy from "./utils/qs_truthy";
 
 const skipLipsync = qsTruthy("skip_lipsync");
+const spawnModsOnly = qsTruthy("mods_only");
+
 const presenceForSessionId = session_id =>
   window.APP.hubChannel &&
   window.APP.hubChannel.presence &&
@@ -100,7 +103,6 @@ export default class DialogAdapter extends EventEmitter {
     super();
 
     this._timeOffsets = [];
-    this._occupants = {};
     this._micProducer = null;
     this._cameraProducer = null;
     this._shareProducer = null;
@@ -113,6 +115,7 @@ export default class DialogAdapter extends EventEmitter {
     this._initialAudioConsumerPromise = null;
     this._initialAudioConsumerResolvers = new Map();
     this._serverTimeRequests = 0;
+    this._closeMicProducerTimeout = null;
     this._avgTimeOffset = 0;
     this._blockedClients = new Map();
     this.type = "dialog";
@@ -128,6 +131,21 @@ export default class DialogAdapter extends EventEmitter {
     this._outgoingVisemeBuffer = null;
     this._visemeMap = new Map();
     this._visemeTimestamps = new Map();
+    this._messageCount = 0;
+    this._updatingProducers = false;
+
+    const showTps = qsTruthy("show_netstats");
+
+    if (showTps) {
+      setInterval(() => {
+        console.log("TPS: ", this._messageCount, "Buffer:", this.scene.systems.networked.incomingData.length);
+        this._messageCount = 0;
+      }, 1000);
+    }
+  }
+
+  hasPendingInitialConsumers() {
+    return this._initialAudioConsumerResolvers.size > 0;
   }
 
   setOutgoingVisemeBuffer(buffer) {
@@ -486,6 +504,7 @@ export default class DialogAdapter extends EventEmitter {
               if (initialAudioResolver) {
                 initialAudioResolver();
                 this._initialAudioConsumerResolvers.delete(peerId);
+                this.scene.emit("audio-consumer-loaded");
               }
 
               if (!skipLipsync && supportsInsertableStreams) {
@@ -682,6 +701,7 @@ export default class DialogAdapter extends EventEmitter {
       initialAudioResolver();
 
       this._initialAudioConsumerResolvers.delete(peerId);
+      this.scene.emit("audio-consumer-loaded");
     }
 
     delete this.occupants[peerId];
@@ -783,16 +803,24 @@ export default class DialogAdapter extends EventEmitter {
   }
 
   getMediaStreamSync(clientId, kind = "audio") {
-    let track;
+    const track = this.getMediaTrackSync(clientId, kind);
 
+    if (track) {
+      return new MediaStream([track]);
+    }
+
+    return null;
+  }
+
+  getMediaTrackSync(clientId, kind = "audio") {
     if (this._clientId === clientId) {
       if (kind === "audio" && this._micProducer) {
-        track = this._micProducer.track;
+        return this._micProducer.track;
       } else if (kind === "video") {
         if (this._cameraProducer && !this._cameraProducer.closed) {
-          track = this._cameraProducer.track;
+          return this._cameraProducer.track;
         } else if (this._shareProducer && !this._shareProducer.closed) {
-          track = this._shareProducer.track;
+          return this._shareProducer.track;
         }
       }
     } else {
@@ -801,14 +829,10 @@ export default class DialogAdapter extends EventEmitter {
       if (peerConsumers) {
         for (const consumer of peerConsumers) {
           if (kind == consumer.track.kind) {
-            track = consumer.track;
+            return consumer.track;
           }
         }
       }
-    }
-
-    if (track) {
-      return new MediaStream([track]);
     }
 
     return null;
@@ -818,17 +842,17 @@ export default class DialogAdapter extends EventEmitter {
     return Date.now() + this._avgTimeOffset;
   }
 
-  sendData(data, clientId) {
-    this.unreliableTransport(data, clientId);
-  }
-  sendDataGuaranteed(data, clientId) {
-    this.reliableTransport(data, clientId);
-  }
-  broadcastData(data) {
+  sendData(data /*, clientId*/) {
     this.unreliableTransport(data);
   }
-  broadcastDataGuaranteed(data) {
+  sendDataGuaranteed(data /*, clientId*/) {
     this.reliableTransport(data);
+  }
+  broadcastData(data, initialSyncNetworkIds) {
+    this.unreliableTransport(data, initialSyncNetworkIds);
+  }
+  broadcastDataGuaranteed(data, initialSyncNetworkIds) {
+    this.reliableTransport(data, initialSyncNetworkIds);
   }
 
   setReconnectionListeners(reconnectingListener, reconnectedListener) {
@@ -868,7 +892,8 @@ export default class DialogAdapter extends EventEmitter {
       this.emitRTCEvent("info", "RTC", () => `Send transport [connect]`);
       this._sendTransport.observer.on("close", () => {
         this.emitRTCEvent("info", "RTC", () => `Send transport [close]`);
-        !this._sendTransport?._closed && this._sendTransport.close();
+        // TODO uncomment without calling close() twice
+        //!this._sendTransport?._closed && this._sendTransport.close();
       });
       this._sendTransport.observer.on("newproducer", producer => {
         this.emitRTCEvent("info", "RTC", () => `Send transport [newproducer]: ${producer.id}`);
@@ -913,18 +938,21 @@ export default class DialogAdapter extends EventEmitter {
         errback(error);
       }
     });
+  }
 
-    if (this._localMediaStream) {
-      this.createMissingProducers(this._localMediaStream);
-    }
+  closeMicProducer() {
+    clearTimeout(this._closeMicProducerTimeout);
+    this._closeMicProducerTimeout = null;
+
+    if (!this._micProducer) return;
+
+    this._micProducer.close();
+    this._protoo?.connected && this._protoo?.request("closeProducer", { producerId: this._micProducer.id });
+    this._micProducer = null;
   }
 
   async closeSendTransport() {
-    if (this._micProducer) {
-      this._micProducer.close();
-      this._protoo?.connected && this._protoo?.request("closeProducer", { producerId: this._micProducer.id });
-      this._micProducer = null;
-    }
+    this.closeMicProducer();
 
     if (this._videoProducer) {
       this._videoProducer.close();
@@ -932,13 +960,15 @@ export default class DialogAdapter extends EventEmitter {
       this._videoProducer = null;
     }
 
+    const transportId = this._sendTransport?.id;
     if (this._sendTransport && !this._sendTransport._closed) {
       this._sendTransport.close();
+      this._sendTransport = null;
     }
 
     if (this._protoo?.connected) {
       try {
-        await this._protoo.request("closeWebRtcTransport", { transportId: this._sendTransport?.id });
+        await this._protoo.request("closeWebRtcTransport", { transportId });
       } catch (err) {
         error(err);
       }
@@ -973,7 +1003,8 @@ export default class DialogAdapter extends EventEmitter {
       this.emitRTCEvent("info", "RTC", () => `Receive transport [connect]`);
       this._recvTransport.observer.on("close", () => {
         this.emitRTCEvent("info", "RTC", () => `Receive transport [close]`);
-        !this._recvTransport?._closed && this._recvTransport.close();
+        // TODO uncomment without calling close() twice
+        //!this._recvTransport?._closed && this._recvTransport.close();
       });
       this._recvTransport.observer.on("newproducer", producer => {
         this.emitRTCEvent("info", "RTC", () => `Receive transport [newproducer]: ${producer.id}`);
@@ -1003,12 +1034,14 @@ export default class DialogAdapter extends EventEmitter {
   }
 
   async closeRecvTransport() {
+    const transportId = this._recvTransport?.id;
     if (this._recvTransport && !this._recvTransport._closed) {
       this._recvTransport.close();
+      this._recvTransport = null;
     }
     if (this._protoo?.connected) {
       try {
-        await this._protoo.request("closeWebRtcTransport", { transportId: this._recvTransport?.id });
+        await this._protoo.request("closeWebRtcTransport", { transportId });
       } catch (err) {
         error(err);
       }
@@ -1045,6 +1078,10 @@ export default class DialogAdapter extends EventEmitter {
     const audioConsumerPromises = [];
     this.occupants = {};
 
+    // clientID needs to be set before calling onOccupantConnected
+    // so that we know which objects we own and flush their state.
+    this._connectSuccess(this._clientId);
+
     // Create a promise that will be resolved once we attach to all the initial consumers.
     // This will gate the connection flow until all voices will be heard.
     for (let i = 0; i < peers.length; i++) {
@@ -1052,10 +1089,12 @@ export default class DialogAdapter extends EventEmitter {
       this._onOccupantConnected(peerId);
       this.occupants[peerId] = peers[i];
       if (!peers[i].hasProducers) continue;
-      audioConsumerPromises.push(new Promise(res => this._initialAudioConsumerResolvers.set(peerId, res)));
+      if (peers[i].hasAudioProducers) {
+        audioConsumerPromises.push(new Promise(res => this._initialAudioConsumerResolvers.set(peerId, res)));
+        this.scene.emit("audio-consumer-loading");
+      }
     }
 
-    this._connectSuccess(this._clientId);
     this._initialAudioConsumerPromise = Promise.all(audioConsumerPromises);
 
     if (this._onOccupantsChanged) {
@@ -1064,68 +1103,78 @@ export default class DialogAdapter extends EventEmitter {
   }
 
   setLocalMediaStream(stream) {
-    this.createMissingProducers(stream);
+    this._localMediaStream = stream;
+    return this.createMissingProducers();
   }
 
-  createMissingProducers(stream) {
+  async createMissingProducers() {
+    const stream = this._localMediaStream;
+
     this.emitRTCEvent("info", "RTC", () => `Creating missing producers`);
 
     if (!this._sendTransport) return;
+    if (!this.scene.is("entered")) return;
+
+    while (this._updatingProducers) {
+      await new Promise(res => setTimeout(res, 150));
+    }
+
+    this._updatingProducers = true;
+
     let sawAudio = false;
     let sawVideo = false;
 
-    stream.getTracks().forEach(async track => {
-      if (track.kind === "audio") {
-        sawAudio = true;
+    await Promise.all(
+      stream.getTracks().map(async track => {
+        if (track.kind === "audio") {
+          sawAudio = true;
 
-        // TODO multiple audio tracks?
-        if (this._micProducer) {
-          if (this._micProducer.track !== track) {
-            this._micProducer.track.stop();
-            this._micProducer.replaceTrack(track);
+          // TODO multiple audio tracks?
+          if (this._micProducer) {
+            if (this._micProducer.track !== track) {
+              this._micProducer.track.stop();
+              this._micProducer.replaceTrack(track);
+            }
+          } else {
+            if (this._micEnabled) {
+              await this.createMicProducer(track);
+
+              if (this._micProducer.track !== track) {
+                this._micProducer.track.stop();
+                this._micProducer.replaceTrack(track);
+              }
+            } else {
+              track.enabled = false;
+            }
           }
         } else {
-          if (!this._micEnabled) {
-            track.enabled = false;
-          }
+          sawVideo = true;
 
-          await this.enabledMic(track);
-
-          if (!this._micEnabled) {
-            this._micProducer.pause();
-            this._protoo.request("pauseProducer", { producerId: this._micProducer.id });
+          if (track._hubs_contentHint === "share") {
+            await this.disableCamera();
+            await this.enableShare(track);
+          } else if (track._hubs_contentHint === "camera") {
+            await this.disableShare();
+            await this.enableCamera(track);
           }
         }
-      } else {
-        sawVideo = true;
 
-        if (track._hubs_contentHint === "share") {
-          await this.disableCamera();
-          await this.enableShare(track);
-        } else if (track._hubs_contentHint === "camera") {
-          await this.disableShare();
-          await this.enableCamera(track);
-        }
-      }
-
-      this.resolvePendingMediaRequestForTrack(this._clientId, track);
-    });
+        this.resolvePendingMediaRequestForTrack(this._clientId, track);
+      })
+    );
 
     if (!sawAudio && this._micProducer) {
-      this._micProducer.close();
-      this._protoo.request("closeProducer", { producerId: this._micProducer.id });
-      this._micProducer = null;
+      this.closeMicProducer();
     }
-
     if (!sawVideo) {
       this.disableCamera();
       this.disableShare();
     }
 
-    this._localMediaStream = stream;
+    this._updatingProducers = false;
   }
 
-  async enabledMic(track) {
+  async createMicProducer(track) {
     // stopTracks = false because otherwise the track will end during a temporary disconnect
     this._micProducer = await this._sendTransport.produce({
       track,
@@ -1133,7 +1182,7 @@ export default class DialogAdapter extends EventEmitter {
       codecOptions: { opusStereo: false, opusDtx: true },
       zeroRtpOnPause: false,
       disableTrackOnPause: true,
-      encodings: [{ maxBitrate: 128000 }]
+      encodings: [{ maxBitrate: 64 * 1024 }] // Firefox doesn't work with higher bitrates
     });
 
     if (supportsInsertableStreams) {
@@ -1184,6 +1233,9 @@ export default class DialogAdapter extends EventEmitter {
       this.emitRTCEvent("info", "RTC", () => `Mic transport closed`);
       this._micProducer = null;
     });
+
+    // Starts paused
+    this._micProducer.resume();
   }
 
   async enableCamera(track) {
@@ -1287,13 +1339,22 @@ export default class DialogAdapter extends EventEmitter {
     window.APP.store.update({
       settings: { micMuted: !this._micEnabled }
     });
+
+    clearTimeout(this._closeMicProducerTimeout);
+    this._closeMicProducerTimeout = null;
+
+    if (enabled) {
+      this.createMissingProducers();
+    } else {
+      this._closeMicProducerTimeout = setTimeout(() => this.closeMicProducer(), 30000);
+    }
   }
 
   isDisconnected() {
     return !this._protoo.connected;
   }
 
-  disconnect() {
+  async disconnect() {
     if (this._closed) return;
 
     this._closed = true;
@@ -1314,14 +1375,17 @@ export default class DialogAdapter extends EventEmitter {
     debug("disconnect()");
 
     // Close mediasoup Transports.
-    this.closeSendTransport();
-    this.closeRecvTransport();
+    await Promise.all([this.closeSendTransport(), this.closeRecvTransport()]);
 
     // Close protoo Peer, though may already be closed if this is happening due to websocket breakdown
     if (this._protoo && this._protoo.connected) {
+      this._protoo.removeAllListeners();
       this._protoo.close();
+      this._protoo = null;
       this.emitRTCEvent("info", "Signaling", () => `[close]`);
     }
+
+    AFRAME.scenes[0].systems.networked.reset();
   }
 
   reconnect(timeout = 2000) {
@@ -1331,6 +1395,7 @@ export default class DialogAdapter extends EventEmitter {
     if (this._protoo) {
       this._protoo.removeAllListeners();
       this._protoo.close();
+      this._protoo = null;
     }
     setTimeout(() => {
       this.connect();
@@ -1422,11 +1487,12 @@ export default class DialogAdapter extends EventEmitter {
       debug(`DC in: ${message}`);
     }
 
-    const { from_session_id: sender } = message;
+    this._messageCount++;
+    const { from: senderRaw } = message;
+    const sender = uuidStringify(senderRaw);
 
     // Wait for presence to show up before processing message;
     let presenceState = presenceForSessionId(sender);
-
     if (!presenceState) {
       let c = 0;
 
@@ -1448,8 +1514,10 @@ export default class DialogAdapter extends EventEmitter {
       return;
     }
 
+    if (spawnModsOnly && presenceState.metas[0] && !presenceState.metas[0].permissions.update_hub) return;
+
     message.source = source;
-    this._onOccupantMessage(message.data, source, sender);
+    this._onOccupantMessage(message.d, source, sender);
   }
 
   emitRTCEvent(level, tag, msgFunc) {
@@ -1552,6 +1620,10 @@ export default class DialogAdapter extends EventEmitter {
       const props = nonAuthorizedComponentProps.get(componentName);
       return props && props.length === 0; // Empty array means fully whitelisted
     }
+  }
+
+  get isMicEnabled() {
+    return this._micProducer && !this._micProducer.paused;
   }
 }
 

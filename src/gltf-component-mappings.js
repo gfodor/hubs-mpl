@@ -117,7 +117,6 @@ AFRAME.GLTFModelPlus.registerComponent("spawn-point", "spawn-point", el => {
     willMaintainWorldUp: true
   });
 });
-AFRAME.GLTFModelPlus.registerComponent("sticky-zone", "sticky-zone");
 AFRAME.GLTFModelPlus.registerComponent("nav-mesh", "nav-mesh", (el, _componentName, componentData) => {
   const nav = AFRAME.scenes[0].systems.nav;
   const zone = componentData.zone || "character";
@@ -369,7 +368,12 @@ AFRAME.GLTFModelPlus.registerComponent(
       enterComponentMapping = getSanitizedComponentMapping(enterComponent, enterProperty, publicComponents);
       leaveComponentMapping = getSanitizedComponentMapping(leaveComponent, leaveProperty, publicComponents);
 
-      targetEntity = indexToEntityMap[target];
+      // indexToEntityMap should be considered depredcated. These references are now resovled by the GLTFHubsComponentExtension
+      if (typeof target === "number") {
+        targetEntity = indexToEntityMap[target];
+      } else {
+        targetEntity = target?.el;
+      }
 
       if (!targetEntity) {
         throw new Error(`Couldn't find target entity with index: ${target}.`);
@@ -430,7 +434,12 @@ AFRAME.GLTFModelPlus.registerComponent(
 
     let srcEl;
     if (srcNode !== undefined) {
-      srcEl = indexToEntityMap[srcNode];
+      // indexToEntityMap should be considered depredcated. These references are now resovled by the GLTFHubsComponentExtension
+      if (typeof srcNode === "number") {
+        srcEl = indexToEntityMap[srcNode];
+      } else {
+        srcEl = srcNode?.el;
+      }
       if (!srcEl) {
         console.warn(
           `Error inflating gltf component "video-texture-srcEl": Couldn't find srcEl entity with index ${srcNode}`
@@ -458,7 +467,12 @@ AFRAME.GLTFModelPlus.registerComponent(
 
     let srcEl;
     if (srcNode !== undefined) {
-      srcEl = indexToEntityMap[srcNode];
+      // indexToEntityMap should be considered depredcated. These references are now resovled by the GLTFHubsComponentExtension
+      if (typeof srcNode === "number") {
+        srcEl = indexToEntityMap[srcNode];
+      } else {
+        srcEl = srcNode?.el;
+      }
       if (!srcEl) {
         console.warn(
           `Error inflating gltf component ${componentName}: Couldn't find srcEl entity with index ${srcNode}`
@@ -470,3 +484,27 @@ AFRAME.GLTFModelPlus.registerComponent(
   }
 );
 AFRAME.GLTFModelPlus.registerComponent("zone-audio-source", "zone-audio-source");
+
+AFRAME.GLTFModelPlus.registerComponent("audio-params", "audio-params", (el, componentName, componentData) => {
+  //APP.audioOverrides.set(el, componentData);
+  //const audio = APP.audios.get(el);
+  //if (audio) {
+  //  updateAudioSettings(el, audio);
+  //}
+});
+
+AFRAME.GLTFModelPlus.registerComponent("audio-zone", "audio-zone", (el, componentName, componentData) => {
+  //el.setAttribute(componentName, { ...componentData });
+});
+
+AFRAME.GLTFModelPlus.registerComponent(
+  "environment-settings",
+  "environment-settings",
+  (el, componentName, componentData) => {
+    // TODO a bit silly to be storing this as an aframe component. Use a glboal store of some sort
+    el.setAttribute(componentName, {
+      ...componentData,
+      backgroundColor: new THREE.Color(componentData.backgroundColor)
+    });
+  }
+);

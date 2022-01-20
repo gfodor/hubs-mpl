@@ -79,12 +79,14 @@ export function useRoomLoadingState(sceneEl) {
       dispatch({ type: "object-loaded" });
 
       // Objects can start loading as a result of loading another object. Wait 1.5 seconds before calling
-      // all-objects-loaded to try to catch loading all objects.
+      // all-objects-loaded to try to catch loading all objects. Or longer if any peers are still loading
       // TODO: Determine a better way to ensure the object dependency chain has resolved, or switch to a
       // progressive loading model where all objects don't have to be loaded to enter the room.
+      const delay = NAF.connection.adapter && NAF.connection.adapter.hasPendingInitialConsumers() ? 5000 : 1500;
+
       loadingTimeoutRef.current = setTimeout(() => {
         dispatch({ type: "all-objects-loaded" });
-      }, 1500);
+      }, delay);
     },
     [dispatch]
   );
@@ -111,9 +113,11 @@ export function useRoomLoadingState(sceneEl) {
         sceneEl.addEventListener("model-loading", onObjectLoading);
         sceneEl.addEventListener("image-loading", onObjectLoading);
         sceneEl.addEventListener("pdf-loading", onObjectLoading);
+        sceneEl.addEventListener("audio-consumer-loading", onObjectLoading);
         sceneEl.addEventListener("model-loaded", onObjectLoaded);
         sceneEl.addEventListener("image-loaded", onObjectLoaded);
         sceneEl.addEventListener("pdf-loaded", onObjectLoaded);
+        sceneEl.addEventListener("audio-consumer-loaded", onObjectLoaded);
         sceneEl.addEventListener("model-error", onObjectLoaded);
         sceneEl.addEventListener("environment-scene-loaded", onEnvironmentLoaded);
         sceneEl.addEventListener("didConnectToNetworkedScene", onNetworkConnected);
@@ -123,9 +127,11 @@ export function useRoomLoadingState(sceneEl) {
         sceneEl.removeEventListener("model-loading", onObjectLoading);
         sceneEl.removeEventListener("image-loading", onObjectLoading);
         sceneEl.removeEventListener("pdf-loading", onObjectLoading);
+        sceneEl.removeEventListener("audio-consumer-loading", onObjectLoading);
         sceneEl.removeEventListener("model-loaded", onObjectLoaded);
         sceneEl.removeEventListener("image-loaded", onObjectLoaded);
         sceneEl.removeEventListener("pdf-loaded", onObjectLoaded);
+        sceneEl.removeEventListener("audio-consumer-loaded", onObjectLoaded);
         sceneEl.removeEventListener("model-error", onObjectLoaded);
         sceneEl.removeEventListener("environment-scene-loaded", onEnvironmentLoaded);
         sceneEl.removeEventListener("didConnectToNetworkedScene", onNetworkConnected);

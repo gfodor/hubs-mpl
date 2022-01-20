@@ -92,7 +92,7 @@ function getPersonName(person, intl) {
 
 export function PeopleSidebar({ hubChannel, people, onSelectPerson, onClose, showMuteAll, onMuteAll }) {
   const intl = useIntl();
-  const [isMutingAll, setIsMutingAll] = useState(false);
+  const [isMutingAll, setIsMutingAll] = useState(hubChannel && hubChannel.isMutingAll);
 
   useEffect(
     () => {

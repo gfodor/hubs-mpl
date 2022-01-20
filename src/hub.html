@@ -10,6 +10,10 @@
     <meta http-equiv="origin-trial" content="Avmr4QYwNHntHZJafouDrl6wRAGpqrIl+KoT0c6+vmZZIfP18LS7Z5IJbYVyetQctHLab/F8qqcmjpeLArnruw4AAABieyJvcmlnaW4iOiJodHRwczovL3ZyLjE3MjkuY29tOjQ0MyIsImZlYXR1cmUiOiJVbnJlc3RyaWN0ZWRTaGFyZWRBcnJheUJ1ZmZlciIsImV4cGlyeSI6MTY1ODg3OTk5OX0=">
     <meta http-equiv="origin-trial" content="AsAmX2MntQKW99tIkdcJFQKYbuQVKUZ4zc/8EsnSe9Oh2cfrKesrjT3BsXNi5DXEMiNz5+CbRJM9PAaJJJSZRgoAAABheyJvcmlnaW4iOiJodHRwczovL2h1YnMubG9jYWw6NDQzIiwiZmVhdHVyZSI6IlVucmVzdHJpY3RlZFNoYXJlZEFycmF5QnVmZmVyIiwiZXhwaXJ5IjoxNjU4ODc5OTk5fQ==">
     <meta http-equiv="origin-trial" content="Aq/i9FfxuowJpXezaC1Eoy/ZPzO+F0sU7/Q4kG+5huIwhxv2qsngGvlpXBzgD+UyLiIwWDncEGQkG0aAD/n5OwIAAABieyJvcmlnaW4iOiJodHRwczovL2h1YnMubG9jYWw6ODA4MCIsImZlYXR1cmUiOiJVbnJlc3RyaWN0ZWRTaGFyZWRBcnJheUJ1ZmZlciIsImV4cGlyeSI6MTY1ODg3OTk5OX0=">
+    <!-- 1729.com subdomain origin trial SAB, old one above somewhere -->
+    <meta http-equiv="origin-trial" content="AppBVQBDOuYMLnPns9eBjJ6FFlCzweGyu1WefrNJ4BLpW+3Xw1/bvBmWusc2BzelB/KoAFbNVziSdPCCg3CTMgIAAAByeyJvcmlnaW4iOiJodHRwczovLzE3MjkuY29tOjQ0MyIsImZlYXR1cmUiOiJVbnJlc3RyaWN0ZWRTaGFyZWRBcnJheUJ1ZmZlciIsImV4cGlyeSI6MTY1ODg3OTk5OSwiaXNTdWJkb21haW4iOnRydWV9">
+    <!-- 1729-test.com subdomain origin trial SAB -->
+    <meta http-equiv="origin-trial" content="AlP355pFinMByGrK8IND4vDSRS/vaZ8I54cFxmiKSUf4PEMQA6etFF2nwLNAo87prjrUGTz8J0cKK3U+J2phwQEAAAB3eyJvcmlnaW4iOiJodHRwczovLzE3MjktdGVzdC5jb206NDQzIiwiZmVhdHVyZSI6IlVucmVzdHJpY3RlZFNoYXJlZEFycmF5QnVmZmVyIiwiZXhwaXJ5IjoxNjU4ODc5OTk5LCJpc1N1YmRvbWFpbiI6dHJ1ZX0=">
     <link rel="icon" sizes="16x16 24x24 32x32 48x48 64x64" href="/favicon.ico">
     <!-- Web-App Manifest (https://w3c.github.io/manifest/) -->
     <link rel="manifest" href="/manifest.webmanifest">
@@ -82,7 +86,6 @@
         freeze-controller
         personal-space-bubble="debug: false;"
         rotate-selected-object
-        environment-map
         light="defaultLightsEnabled: false"
     >
         <a-assets>
@@ -148,7 +151,9 @@
                                     text="side: double; align: center; color: #ddd"
                                     position="0 1 0"
                                     scale="6 6 6"
-                                ></a-entity>
+                                >
+                                </a-entity>
+                                <a-image billboard class="twitter-avatar" position="0 1.5 0" scale="0.5 0.5 0.5" src=""></a-image>
                                 <a-entity
                                     billboard
                                     class="identityName"
@@ -749,7 +754,7 @@
             </template>
 
             <template id="pager-hover-menu">
-                <a-entity class="ui interactable-ui hover-container" visible="false">
+                <a-entity class="ui interactable-ui hover-container" visible="false" position="0 0 0.01">
                     <a-entity class="prev-button" position="-0.35 0 0">
                         <a-entity is-remote-hover-target tags="singleActionButton:true; isHoverMenuChild: true;" mixin="rounded-text-button" slice9="width: 0.2">
                             <a-entity
@@ -1042,7 +1047,7 @@
             ik-root
             player-info
             set-yxz-order
-            periodic-full-syncs
+            periodic-initial-syncs
             visible="false"
             tags="inspectable: true; preventAudioBoost: true"
             inspect-pivot-child-selector="selector:.inspect-pivot"

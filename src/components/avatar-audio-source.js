@@ -41,41 +41,18 @@ AFRAME.registerComponent("avatar-audio-source", {
 
     const ownerId = await getOwnerId(this.el);
     this.el.sceneEl.systems["hubs-systems"].avatarAudioTrackSystem.register(this.el, ownerId);
-
-    const stream = NAF.connection.adapter.getMediaStreamSync(ownerId, "audio");
-
-    if (stream) {
-      const audioTrack = stream.getAudioTracks()[0];
-
-      if (audioTrack && this.trackLastUpdated === null) {
-        this.trackLastUpdated = performance.now();
-        this.el.sceneEl.systems["hubs-systems"].avatarAudioTrackSystem.updateTrack(this.el, audioTrack, ownerId);
-      }
-    }
-
-    // We subscribe to audio stream notifications for this peer to update the audio source
-    // This could happen in case there is an ICE failure that requires a transport recreation.
-    NAF.connection.adapter.on("stream_updated", this._onStreamUpdated, this);
-  },
-
-  async _onStreamUpdated(peerId, kind) {
-    const ownerId = await getOwnerId(this.el);
-    if (ownerId !== peerId || kind !== "audio") return;
-
-    const newStream = NAF.connection.adapter.getMediaStreamSync(peerId, "audio");
-    if (!newStream) return;
-
-    const audioTrack = newStream.getAudioTracks()[0];
-    if (!audioTrack) return;
-
-    this.trackLastUpdated = performance.now();
-    this.el.sceneEl.systems["hubs-systems"].avatarAudioTrackSystem.updateTrack(this.el, audioTrack, ownerId);
   },
 
   remove: function() {
     this.el.sceneEl.systems["hubs-systems"].avatarAudioTrackSystem.unregister(this.el);
+  },
 
-    NAF.connection.adapter.off("stream_updated", this._onStreamUpdated, this);
+  toDump: function(indent, nindent) {
+    let s = "";
+    s += `${indent} up: ${this.trackLastUpdated}\n`;
+    s += this.el.sceneEl.systems["hubs-systems"].avatarAudioTrackSystem.toDump(this.el, indent, nindent);
+
+    return s;
   }
 });
 

@@ -32,6 +32,7 @@ import { MediaFramesSystem } from "./media-frames";
 import { InspectYourselfSystem } from "./inspect-yourself-system";
 import { EmojiSystem } from "./emoji-system";
 import { AvatarAudioTrackSystem } from "./avatar-audio-track-system";
+import { EnvironmentSystem } from "./environment-system";
 
 AFRAME.registerSystem("hubs-systems", {
   init() {
@@ -73,6 +74,7 @@ AFRAME.registerSystem("hubs-systems", {
     this.inspectYourselfSystem = new InspectYourselfSystem();
     this.emojiSystem = new EmojiSystem(this.el);
     this.avatarSystem = new AvatarSystem(this.el);
+    this.environmentSystem = new EnvironmentSystem(this.el);
   },
 
   tick(t, dt) {
